@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>椭圆机运动热量消耗计算器</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    label { display: block; margin: 10px 0 5px; }
+    input, select { width: 200px; padding: 5px; }
+    .required::after { content: '*'; color: red; margin-left: 5px; }
+    button { margin-top: 20px; padding: 10px 20px; }
+    #result, #recommendation { margin-top: 20px; white-space: pre-wrap; font-weight: bold; }
+    #chartContainer { margin-top: 30px; width: 100%; max-width: 700px; }
+  </style>
+</head>
+<body>
+  <h1>椭圆机运动热量消耗计算器</h1>
+  <label class="required">体重（kg）</label>
+  <input type="number" id="weight">
+
+  <label class="required">性别</label>
+  <select id="gender">
+    <option value="">请选择</option>
+    <option value="male">男</option>
+    <option value="female">女</option>
+  </select>
+
+  <label>心率（bpm）</label>
+  <input type="number" id="hr" value="150">
+
+  <label>坡度等级</label>
+  <input type="number" id="incline" value="5">
+
+  <label>阻力等级</label>
+  <input type="number" id="resistance" value="15">
+
+  <label>锻炼时间（分钟）</label>
+  <input type="number" id="duration" value="60">
+
+  <button onclick="calculateCalories()">计算</button>
+
+  <div id="result"></div>
+  <div id="recommendation"></div>
+  <div id="chartContainer">
+    <canvas id="calorieChart"></canvas>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    let chart;
+
+    function calculateCalories() {
+      const weight = parseFloat(document.getElementById('weight').value);
+      const gender = document.getElementById('gender').value;
+      const hr = parseFloat(document.getElementById('hr').value) || 150;
+      const incline = parseFloat(document.getElementById('incline').value) || 5;
+      const resistance = parseFloat(document.getElementById('resistance').value) || 15;
+      const duration = parseFloat(document.getElementById('duration').value) || 60;
+
+      const resultDiv = document.getElementById('result');
+      const recDiv = document.getElementById('recommendation');
+      resultDiv.innerText = '';
+      recDiv.innerText = '';
+
+      if (!weight || !gender) {
+        resultDiv.innerText = '❌ 请填写体重和选择性别再进行计算。';
+        return;
+      }
+
+      const genderFactor = gender === 'female' ? 0.93 : 1.0;
+      const baseMET = (hr / 150) * 8 * genderFactor;
+      const resistanceFactor = Math.sqrt(resistance) / Math.sqrt(20);
+      const inclineFactor = Math.sqrt(incline) / Math.sqrt(10);
+      let adjustedMET = baseMET * (1 + 0.1 * resistanceFactor + 0.05 * inclineFactor);
+      adjustedMET = Math.max(1, Math.min(20, adjustedMET));
+
+      const hours = duration / 60;
+      const calories = adjustedMET * weight * hours;
+
+      resultDiv.innerText =
+        `✅ 估算 MET 值：${adjustedMET.toFixed(2)}\n✅ 估算热量消耗：${calories.toFixed(2)} 千卡`;
+
+      const timePoints = [];
+      const caloriePoints = [];
+      for (let t = 0; t <= duration; t += 5) {
+        timePoints.push(t);
+        caloriePoints.push((adjustedMET * weight * t / 60).toFixed(2));
+      }
+
+      if (chart) chart.destroy();
+      chart = new Chart(document.getElementById('calorieChart').getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: timePoints,
+          datasets: [{
+            label: '累计热量消耗（千卡）',
+            data: caloriePoints,
+            borderColor: 'rgba(75, 192, 192, 1)',
+            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          scales: {
+            x: { title: { display: true, text: '时间（分钟）' }},
+            y: { title: { display: true, text: '热量（千卡）' }}
+          }
+        }
+      });
+
+      // 推荐坡度区间（非线性体重调节）
+      const recommendedRange = [];
+      for (let i = 1; i <= 15; i++) {
+        const rawSlope = 1 / (2 * Math.sqrt(i));
+        const deltaWeight = weight - 75;
+        const weightFactor = 1 + 0.004 * Math.sqrt(Math.abs(deltaWeight)) * (deltaWeight >= 0 ? 1 : -1);
+        const effectiveSlope = rawSlope * weightFactor;
+        if (effectiveSlope >= 0.20 && effectiveSlope <= 0.25) {
+          recommendedRange.push(i);
+        }
+      }
+
+      const baseStrength = weight / 6;
+      const lowRes = Math.max(5, Math.floor(baseStrength * 0.9));
+      const highRes = Math.min(20, Math.ceil(baseStrength * 1.1));
+      const targetHR = gender === 'female' ? 140 : 150;
+
+      const recText = `🎯 推荐设置（基于 ${weight}kg）：\n- 推荐坡度范围：${recommendedRange.length ? recommendedRange.join(' ~ ') : '无'}\n  （考虑体重后的斜率区间 0.25~0.20）\n- 建议阻力：${lowRes} ~ ${highRes}\n- 建议心率：${targetHR} bpm`;
+
+      recDiv.innerText = recText;
+    }
+  </script>
+</body>
+</html>
